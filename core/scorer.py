@@ -870,6 +870,22 @@ def score_case(case_name, api_key, own_subs=0, progress_callback=None):
     if contrarian:
         contrarian_titles = [t.replace("{case}",case_name) for t in contrarian["titles"]]
 
+    # Collect top video data for display
+    top_videos_data = []
+    for v in videos[:5]:
+        vid_id = v.get("id", "")
+        top_videos_data.append({
+            "video_id": vid_id,
+            "title": v.get("snippet", {}).get("title", ""),
+            "channel": v.get("snippet", {}).get("channelTitle", ""),
+            "channel_id": v.get("snippet", {}).get("channelId", ""),
+            "views": int(v.get("statistics", {}).get("viewCount", 0)),
+            "likes": int(v.get("statistics", {}).get("likeCount", 0)),
+            "comments": int(v.get("statistics", {}).get("commentCount", 0)),
+            "duration": round(parse_duration(v.get("contentDetails", {}).get("duration", "")), 1),
+            "published": v.get("snippet", {}).get("publishedAt", "")[:10],
+        })
+
     return {
         "case_name": case_name,
         "vps": vps,
@@ -911,6 +927,7 @@ def score_case(case_name, api_key, own_subs=0, progress_callback=None):
         "top_requests": [r[:120] for r in analysis["requests"]["examples"][:5]],
         "top_complaints": [c[:120] for c in analysis["complaints"]["examples"][:5]],
         "r_details": r_det,
+        "top_videos": top_videos_data,
         "error": None
     }
 
