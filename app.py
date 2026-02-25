@@ -8,6 +8,8 @@ st.set_page_config(page_title="CaseFinder", page_icon="🎯", layout="wide")
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+if "last_result" not in st.session_state:
+    st.session_state.last_result = None
 
 # SIDEBAR
 st.sidebar.title("🎯 CaseFinder")
@@ -71,20 +73,19 @@ elif menu == "🎯 Score a Case":
     if not st.session_state.authenticated: st.warning("Please login."); st.stop()
     user = get_user_by_id(st.session_state.user_id)
     if not user.get('youtube_api_key'):
-        st.error("⚠️ Add your YouTube API key in Settings first!")
+        st.error("Add your YouTube API key in Settings first!")
         st.stop()
 
-    with st.form("score_form"):
-        case_name = st.text_input("Case name", placeholder="e.g., Alonzo Brooks")
-        submitted = st.form_submit_button("🎯 Score Case")
+    case_name = st.text_input("Case name", placeholder="e.g., Alonzo Brooks")
+    score_btn = st.button("🎯 Score Case")
 
-    if submitted and case_name:
+    if score_btn and case_name:
         progress_bar = st.progress(0)
         status = st.empty()
-        phases = {"0": 0, "1": 15, "2": 30, "3": 45, "4": 60, "5": 75, "6": 90}
+        phases = {0: 0, 1: 15, 2: 30, 3: 45, 4: 60, 5: 75, 6: 90}
 
         def update_progress(phase, msg):
-            progress_bar.progress(phases.get(str(phase), 0))
+            progress_bar.progress(phases.get(phase, 0))
             status.text(msg)
 
         try:
@@ -92,10 +93,20 @@ elif menu == "🎯 Score a Case":
                               user.get('subscriber_count', 0), update_progress)
             progress_bar.progress(100)
             status.text("Done!")
+            st.session_state.last_result = result
+        except Exception as e:
+            st.error(f"Scoring error: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
-            if result.get("error"):
-                st.error(f"Error: {result['error']}")
-            else:
+    # Display results from session state
+    result = st.session_state.last_result
+    if result:
+        if result.get("error"):
+            st.error(f"Error: {result['error']}")
+        else:
+            # Save to database
+            try:
                 save_score(st.session_state.user_id, result["case_name"], {
                     "vps": result["vps"], "rating": result["rating"],
                     "demand": result["demand"], "supply": result["supply"],
@@ -103,96 +114,90 @@ elif menu == "🎯 Score a Case":
                     "case_name": result["case_name"],
                     "angle": result.get("angle", ""),
                 })
+            except: pass
 
-                # VPS Display
-                vps = result['vps']
-                if vps >= 90: color = "#FF4500"
-                elif vps >= 75: color = "#2ECC40"
-                elif vps >= 60: color = "#0074D9"
-                elif vps >= 40: color = "#FF851B"
-                else: color = "#AAAAAA"
+            # VPS Display
+            vps = result['vps']
+            if vps >= 90: color = "#FF4500"
+            elif vps >= 75: color = "#2ECC40"
+            elif vps >= 60: color = "#0074D9"
+            elif vps >= 40: color = "#FF851B"
+            else: color = "#AAAAAA"
 
-                st.markdown(f"""
-                <div style="padding:20px; border:3px solid {color}; border-radius:15px; text-align:center; margin:10px 0;">
-                    <h1 style="margin:0; font-size:56px; color:{color};">{vps}/100</h1>
-                    <p style="margin:5px 0; font-size:20px;">{result['rating']}</p>
-                    <p style="margin:0; font-size:14px; color:#888;">{result.get('mode','')}</p>
-                </div>
-                """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="padding:20px; border:3px solid {color}; border-radius:15px; text-align:center; margin:10px 0;">
+                <h1 style="margin:0; font-size:56px; color:{color};">{vps}/100</h1>
+                <p style="margin:5px 0; font-size:20px;">{result['rating']}</p>
+                <p style="margin:0; font-size:14px; color:#888;">{result.get('mode','')}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-                # Three pillars
-                st.markdown("---")
-                col1, col2, col3 = st.columns(3)
+            st.markdown("---")
+            col1, col2, col3 = st.columns(3)
 
-                with col1:
-                    st.markdown(f"### 📊 Demand: {result['demand']}/50")
-                    st.write(f"D1 Peak Views: **{result['d1']}**/15 — {result.get('peak_views',0):,} ({result.get('peak_channel','?')})")
-                    st.write(f"D2 Multi-Creator: **{result['d2']}**/10 — {result.get('creators_100k',0)} channels")
-                    st.write(f"D3 Cross-Platform: **{result['d3']}**/10 — {', '.join(result.get('d3_sources',[])) or 'none'}")
-                    st.write(f"D4 Search Demand: **{result['d4']}**/5")
-                    st.write(f"D5 Pre-YT Buzz: **{result['d5']}**/5 — {result.get('d5_source','none')}")
-                    st.write(f"D6 Long-Form: **{result['d6']}**/5")
+            with col1:
+                st.markdown(f"### 📊 Demand: {result['demand']}/50")
+                st.write(f"D1 Peak Views: **{result['d1']}**/15 — {result.get('peak_views',0):,} ({result.get('peak_channel','?')})")
+                st.write(f"D2 Multi-Creator: **{result['d2']}**/10 — {result.get('creators_100k',0)} channels")
+                st.write(f"D3 Cross-Platform: **{result['d3']}**/10 — {', '.join(result.get('d3_sources',[])) or 'none'}")
+                st.write(f"D4 Search Demand: **{result['d4']}**/5")
+                st.write(f"D5 Pre-YT Buzz: **{result['d5']}**/5 — {result.get('d5_source','none')}")
+                st.write(f"D6 Long-Form: **{result['d6']}**/5")
 
-                with col2:
-                    st.markdown(f"### 📉 Supply Gap: {result['supply']}/25")
-                    st.write(f"S1 Recency: **{result['s1']}**/15 — {result.get('s1_months',0)} months")
-                    st.write(f"S2 Quality: **{result['s2']}**/10 (dur:{result.get('s2_dur',0)} like:{result.get('s2_lr',0)} comp:{result.get('s2_comp',0)})")
-                    st.write(f"S3 Timing: **{result['s3']}**/5 — {result.get('s3_reason','none')}")
-                    st.write(f"S4 Saturation: **{result['s4']}** — {result.get('s4_mega',0)} mega-videos")
+            with col2:
+                st.markdown(f"### 📉 Supply Gap: {result['supply']}/25")
+                st.write(f"S1 Recency: **{result['s1']}**/15 — {result.get('s1_months',0)} months")
+                st.write(f"S2 Quality: **{result['s2']}**/10 (dur:{result.get('s2_dur',0)} like:{result.get('s2_lr',0)} comp:{result.get('s2_comp',0)})")
+                st.write(f"S3 Timing: **{result['s3']}**/5 — {result.get('s3_reason','none')}")
+                st.write(f"S4 Saturation: **{result['s4']}** — {result.get('s4_mega',0)} mega-videos")
 
-                with col3:
-                    st.markdown(f"### 🔥 Emotional: {result['emotional']}/35")
-                    st.write(f"E1 CVR: **{result['e1']}**/8 — {result.get('avg_cvr',0):.2f}%")
-                    st.write(f"E2 Intensity: **{result['e2']}**/8 — {result.get('dominant_emotion','neutral')}")
-                    st.write(f"E3 Questions: **{result['e3']}**/5")
-                    st.write(f"E4 Theories: **{result['e4']}**/4")
-                    st.write(f"E5 Requests: **{result['e5']}**/5")
-                    st.write(f"R  Rabbit Hole: **{result['r']}**/5 — {', '.join(result.get('r_details',[])) or 'none'}")
+            with col3:
+                st.markdown(f"### 🔥 Emotional: {result['emotional']}/35")
+                st.write(f"E1 CVR: **{result['e1']}**/8 — {result.get('avg_cvr',0):.2f}%")
+                st.write(f"E2 Intensity: **{result['e2']}**/8 — {result.get('dominant_emotion','neutral')}")
+                st.write(f"E3 Questions: **{result['e3']}**/5")
+                st.write(f"E4 Theories: **{result['e4']}**/4")
+                st.write(f"E5 Requests: **{result['e5']}**/5")
+                st.write(f"R Rabbit Hole: **{result['r']}**/5 — {', '.join(result.get('r_details',[])) or 'none'}")
 
-                # Gates
-                st.markdown("---")
-                st.markdown("### 🔒 Gates")
-                g1, g2, g3 = st.columns(3)
-                with g1: st.write(f"**N Narrative:** {result.get('gate_n','?')} ({', '.join(result.get('gate_n_elements',[]))})")
-                with g2: st.write(f"**T Thumbnail:** {result.get('gate_t','?')} ({result.get('gate_t_detail','')})")
-                with g3: st.write(f"**C Competition:** {result.get('gate_c','?')} — {result.get('gate_c_detail','')}")
+            st.markdown("---")
+            st.markdown("### 🔒 Gates")
+            g1, g2, g3 = st.columns(3)
+            with g1: st.write(f"**N Narrative:** {result.get('gate_n','?')} ({', '.join(result.get('gate_n_elements',[]))})")
+            with g2: st.write(f"**T Thumbnail:** {result.get('gate_t','?')} ({result.get('gate_t_detail','')})")
+            with g3: st.write(f"**C Competition:** {result.get('gate_c','?')} — {result.get('gate_c_detail','')}")
 
-                # Angle
-                st.markdown("---")
-                st.markdown(f"### 📌 Recommended Angle: {result.get('angle','')}")
-                st.write(f"**Why:** {result.get('angle_reason','')}")
-                st.write("**Suggested Titles:**")
-                for t in result.get('titles', []): st.write(f"• {t}")
+            st.markdown("---")
+            st.markdown(f"### 📌 Recommended Angle: {result.get('angle','')}")
+            st.write(f"**Why:** {result.get('angle_reason','')}")
+            st.write("**Suggested Titles:**")
+            for t in result.get('titles', []): st.write(f"• {t}")
 
-                if result.get('contrarian'):
-                    st.markdown(f"### 🔄 Contrarian Angle: {result['contrarian']['angle']}")
-                    st.write(f"**Dominant theory:** {result['contrarian'].get('dominant_theory','')[:100]}")
-                    for t in result.get('contrarian_titles', []): st.write(f"• {t}")
+            if result.get('contrarian'):
+                st.markdown(f"### 🔄 Contrarian: {result['contrarian']['angle']}")
+                st.write(f"**Dominant theory:** {result['contrarian'].get('dominant_theory','')[:100]}")
+                for t in result.get('contrarian_titles', []): st.write(f"• {t}")
 
-                # Comment insights
-                st.markdown("---")
-                if result.get('top_questions'):
-                    st.markdown("### ❓ Key Audience Questions")
-                    for q in result['top_questions']: st.write(f"• {q}")
+            st.markdown("---")
+            if result.get('top_questions'):
+                st.markdown("### ❓ Key Audience Questions")
+                for q in result['top_questions']: st.write(f"• {q}")
+            if result.get('top_theories'):
+                st.markdown("### 💭 Top Theories")
+                for t in result['top_theories']: st.write(f"• {t}")
+            if result.get('top_requests'):
+                st.markdown("### 📢 Content Requests")
+                for r in result['top_requests']: st.write(f"• {r}")
+            if result.get('top_complaints'):
+                st.markdown("### ⚠️ Complaints About Existing Coverage")
+                for c in result['top_complaints']: st.write(f"• {c}")
 
-                if result.get('top_theories'):
-                    st.markdown("### 💭 Top Theories")
-                    for t in result['top_theories']: st.write(f"• {t}")
+            st.write(f"📊 Comments analyzed: {result.get('total_comments',0)}")
+            st.success("💾 Score saved to rankings!")
 
-                if result.get('top_requests'):
-                    st.markdown("### 📢 Content Requests")
-                    for r in result['top_requests']: st.write(f"• {r}")
-
-                if result.get('top_complaints'):
-                    st.markdown("### ⚠️ Complaints About Existing Coverage")
-                    for c in result['top_complaints']: st.write(f"• {c}")
-
-                st.markdown("---")
-                st.write(f"📊 Comments analyzed: {result.get('total_comments',0)}")
-                st.success("💾 Score saved to rankings!")
-
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+            if st.button("Clear Results"):
+                st.session_state.last_result = None
+                st.rerun()
 
 # BATCH SCORE
 elif menu == "📊 Batch Score":
@@ -200,20 +205,14 @@ elif menu == "📊 Batch Score":
     if not st.session_state.authenticated: st.warning("Please login."); st.stop()
     user = get_user_by_id(st.session_state.user_id)
     if not user.get('youtube_api_key'):
-        st.error("⚠️ Add your YouTube API key in Settings first!")
-        st.stop()
+        st.error("Add your YouTube API key in Settings first!"); st.stop()
 
-    with st.form("batch_form"):
-        cases_text = st.text_area("Enter case names (one per line)", placeholder="Alonzo Brooks\nElisa Lam\nMaura Murray")
-        submitted = st.form_submit_button("📊 Score All")
-
-    if submitted and cases_text:
+    cases_text = st.text_area("Enter case names (one per line)", placeholder="Alonzo Brooks\nElisa Lam\nMaura Murray")
+    if st.button("📊 Score All"):
         cases = [c.strip() for c in cases_text.strip().split("\n") if c.strip()]
-        if not cases:
-            st.warning("Enter at least one case name.")
-        else:
+        if cases:
             results = []
-            progress = st.progress(0)
+            prog = st.progress(0)
             for i, case in enumerate(cases):
                 st.write(f"Scoring: **{case}**...")
                 try:
@@ -226,16 +225,13 @@ elif menu == "📊 Batch Score":
                             "emotional": r["emotional"], "case_name": r["case_name"],
                             "angle": r.get("angle", ""),
                         })
-                except Exception as e:
-                    st.warning(f"Error scoring {case}: {e}")
-                progress.progress((i+1) / len(cases))
-
+                except Exception as e: st.warning(f"Error: {case}: {e}")
+                prog.progress((i+1) / len(cases))
             if results:
                 results.sort(key=lambda x: x["vps"], reverse=True)
-                st.markdown("---")
                 st.markdown("### 📊 Final Rankings")
                 for i, r in enumerate(results, 1):
-                    st.write(f"**#{i}** [{r['vps']}/100] {r['rating']} — **{r['case_name']}** | Angle: {r.get('angle','')}")
+                    st.write(f"**#{i}** [{r['vps']}/100] {r['rating']} — **{r['case_name']}** | {r.get('angle','')}")
 
 # DISCOVER
 elif menu == "🔍 Discover":
@@ -243,39 +239,29 @@ elif menu == "🔍 Discover":
     if not st.session_state.authenticated: st.warning("Please login."); st.stop()
     user = get_user_by_id(st.session_state.user_id)
     if not user.get('youtube_api_key'):
-        st.error("⚠️ Add your YouTube API key in Settings first!")
-        st.stop()
-
+        st.error("Add your YouTube API key in Settings first!"); st.stop()
     if st.button("🔍 Find Candidates"):
         status = st.empty()
-        def update(msg): status.text(msg)
-
         with st.spinner("Discovering..."):
-            candidates = discover(user['youtube_api_key'], count=10, progress_callback=update)
-
+            candidates = discover(user['youtube_api_key'], count=10, progress_callback=lambda msg: status.text(msg))
         if candidates:
             st.markdown("### 📊 Top Candidates")
             for i, c in enumerate(candidates, 1):
                 label = "🔥" if c["d1"] >= 9 else "✅" if c["d1"] >= 6 else "👍" if c["d1"] >= 3 else "⬜"
-                st.write(f"**#{i}** {label} **{c['name']}** — D1: {c['d1']}/15 | Peak: {c['peak']:,} | Source: {c['source']}")
-        else:
-            st.info("No candidates found.")
+                st.write(f"**#{i}** {label} **{c['name']}** — D1: {c['d1']}/15 | Peak: {c['peak']:,} | {c['source']}")
+        else: st.info("No candidates found.")
 
 # WATCHLIST
 elif menu == "👁️ Watchlist":
     st.title("👁️ Watchlist")
     if not st.session_state.authenticated: st.warning("Please login."); st.stop()
     from db.database import get_watchlist, add_to_watchlist, remove_from_watchlist
-
     with st.form("add_watch"):
-        col1, col2 = st.columns([3, 1])
-        with col1: new_case = st.text_input("Add case", placeholder="Case name")
-        with col2: st.write(""); add_btn = st.form_submit_button("Add")
-        if add_btn and new_case:
-            if add_to_watchlist(st.session_state.user_id, new_case.title()):
-                st.success("Added!"); st.rerun()
-            else: st.warning("Already exists.")
-
+        new_case = st.text_input("Add case", placeholder="Case name")
+        if st.form_submit_button("Add"):
+            if new_case:
+                if add_to_watchlist(st.session_state.user_id, new_case.title()): st.success("Added!"); st.rerun()
+                else: st.warning("Already exists.")
     st.markdown("---")
     watchlist = get_watchlist(st.session_state.user_id)
     if watchlist:
@@ -285,7 +271,7 @@ elif menu == "👁️ Watchlist":
             with col2:
                 if st.button("Remove", key=f"r_{item['id']}"):
                     remove_from_watchlist(st.session_state.user_id, item['case_name']); st.rerun()
-    else: st.info("Empty watchlist.")
+    else: st.info("Empty.")
 
 # RANKINGS
 elif menu == "🏆 Rankings":
@@ -308,7 +294,6 @@ elif menu == "📈 Results":
     st.title("📈 Results")
     if not st.session_state.authenticated: st.warning("Please login."); st.stop()
     from db.database import save_result, get_user_results
-
     with st.form("add_result"):
         case = st.text_input("Case name")
         views = st.number_input("Views (30 days)", min_value=0, step=1000)
@@ -316,13 +301,12 @@ elif menu == "📈 Results":
             if case and views > 0:
                 save_result(st.session_state.user_id, case.title(), int(views))
                 st.success("Saved!"); st.rerun()
-
     st.markdown("---")
     results = get_user_results(st.session_state.user_id)
     if results:
         for r in results:
             st.write(f"**{r['case_name']}** — {r['views_30d']:,} views ({r['recorded_at'][:10]})")
-    else: st.info("No results recorded yet.")
+    else: st.info("No results yet.")
 
 # SETTINGS
 elif menu == "⚙️ Settings":
@@ -330,35 +314,23 @@ elif menu == "⚙️ Settings":
     if not st.session_state.authenticated: st.warning("Please login."); st.stop()
     from db.database import update_user_api_key, update_user_channel
     user = get_user_by_id(st.session_state.user_id)
-
     st.subheader("Profile")
     st.write(f"**Username:** {user['username']} | **Email:** {user['email']}")
-
     st.markdown("---")
     st.subheader("YouTube API Key")
     with st.form("api_form"):
         api_key = st.text_input("API Key", value=user.get('youtube_api_key',''), type="password")
         if st.form_submit_button("Save"):
-            if api_key:
-                update_user_api_key(st.session_state.user_id, api_key)
-                st.success("Saved!"); st.rerun()
+            if api_key: update_user_api_key(st.session_state.user_id, api_key); st.success("Saved!"); st.rerun()
     if user.get('youtube_api_key'): st.success("✅ API Key set")
     else: st.warning("⚠️ No API Key")
-
     st.markdown("---")
     st.subheader("Channel Info")
     with st.form("channel_form"):
         handle = st.text_input("Channel Handle", value=user.get('channel_handle',''), placeholder="@YourChannel")
         channel_id = st.text_input("Channel ID", value=user.get('channel_id',''), placeholder="UC...")
-        subs = st.number_input("Subscriber Count", value=user.get('subscriber_count',0), min_value=0)
+        subs = st.number_input("Subscribers", value=user.get('subscriber_count',0), min_value=0)
         if st.form_submit_button("Save Channel"):
-            update_user_channel(st.session_state.user_id, handle, channel_id, int(subs))
-            st.success("Saved!"); st.rerun()
-
+            update_user_channel(st.session_state.user_id, handle, channel_id, int(subs)); st.success("Saved!"); st.rerun()
     st.markdown("---")
-    st.markdown("""
-    **How to get API key:**
-    1. [Google Cloud Console](https://console.cloud.google.com/)
-    2. Create project → Enable "YouTube Data API v3"
-    3. Credentials → Create API Key
-    """)
+    st.markdown("**Get API key:** [Google Cloud Console](https://console.cloud.google.com/) → Create project → Enable YouTube Data API v3 → Credentials → Create API Key")
