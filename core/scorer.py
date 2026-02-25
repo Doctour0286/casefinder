@@ -463,7 +463,7 @@ def analyze_comments(comments, case_name=""):
             if any(kw in t for kw in kws):
                 res[cat]["count"] += 1
                 if len(res[cat]["examples"]) < mx:
-                    res[cat]["examples"].append(txt)
+                    res[cat]["examples"].append({"text": txt, "vid": c.get("_vid",""), "src": c.get("_src","")})
         is_q = False
         if any(kw in t for kw in QUESTIONS_STRONG): is_q = True
         elif "?" in t:
@@ -472,7 +472,7 @@ def analyze_comments(comments, case_name=""):
         if is_q:
             res["questions"]["count"] += 1
             if len(res["questions"]["examples"]) < 8:
-                res["questions"]["examples"].append(txt)
+                res["questions"]["examples"].append({"text": txt, "vid": c.get("_vid",""), "src": c.get("_src","")})
     hits = (res["anger"]["count"] + res["sadness"]["count"] +
             res["fear"]["count"] + int(res["obsession"]["count"] * 1.5))
     res["emotional_hits"] = hits
@@ -526,7 +526,7 @@ def gate_c(videos, api_key):
 def detect_contrarian(analysis):
     theories = analysis.get("theories", {}).get("examples", [])
     if len(theories) < 2: return None
-    dominant = theories[0]
+    dominant = theories[0]["text"] if isinstance(theories[0], dict) else theories[0]
     return {
         "angle": "The Contrarian Take",
         "reason": "Dominant audience theory can be challenged",
@@ -785,7 +785,10 @@ def score_case(case_name, api_key, own_subs=0, progress_callback=None):
         if case_words and not any(w in vtitle for w in case_words): continue
         coms = get_comments_extended(v["id"], api_key)
         ch_name = v['snippet']['channelTitle']
-        for c in coms: c["_src"] = ch_name
+        vid_id = v["id"]
+        for c in coms:
+            c["_src"] = ch_name
+            c["_vid"] = vid_id
         all_comments.extend(coms)
         if len(all_comments) >= 250: break
 
@@ -870,6 +873,17 @@ def score_case(case_name, api_key, own_subs=0, progress_callback=None):
     if contrarian:
         contrarian_titles = [t.replace("{case}",case_name) for t in contrarian["titles"]]
 
+    # Collect ALL video data for linking
+    all_videos_map = {}
+    for v in videos:
+        vid_id = v.get("id", "")
+        all_videos_map[vid_id] = {
+            "video_id": vid_id,
+            "title": v.get("snippet", {}).get("title", ""),
+            "channel": v.get("snippet", {}).get("channelTitle", ""),
+            "channel_id": v.get("snippet", {}).get("channelId", ""),
+        }
+
     # Collect top video data for display
     top_videos_data = []
     for v in videos[:5]:
@@ -922,12 +936,13 @@ def score_case(case_name, api_key, own_subs=0, progress_callback=None):
         "avg_like_ratio": avg_lr,
         "dominant_emotion": analysis["dominant_emotion"],
         "total_comments": analysis["total"],
-        "top_questions": [q[:120] for q in analysis["questions"]["examples"][:8]],
-        "top_theories": [t[:120] for t in analysis["theories"]["examples"][:5]],
-        "top_requests": [r[:120] for r in analysis["requests"]["examples"][:5]],
-        "top_complaints": [c[:120] for c in analysis["complaints"]["examples"][:5]],
+        "top_questions": [{"text": q["text"][:200] if isinstance(q, dict) else q[:200], "vid": q.get("_vid","") if isinstance(q, dict) else "", "src": q.get("_src","") if isinstance(q, dict) else ""} for q in analysis["questions"]["examples"][:8]],
+        "top_theories": [{"text": t["text"][:200] if isinstance(t, dict) else t[:200], "vid": t.get("_vid","") if isinstance(t, dict) else "", "src": t.get("_src","") if isinstance(t, dict) else ""} for t in analysis["theories"]["examples"][:5]],
+        "top_requests": [{"text": r["text"][:200] if isinstance(r, dict) else r[:200], "vid": r.get("_vid","") if isinstance(r, dict) else "", "src": r.get("_src","") if isinstance(r, dict) else ""} for r in analysis["requests"]["examples"][:5]],
+        "top_complaints": [{"text": c["text"][:200] if isinstance(c, dict) else c[:200], "vid": c.get("_vid","") if isinstance(c, dict) else "", "src": c.get("_src","") if isinstance(c, dict) else ""} for c in analysis["complaints"]["examples"][:5]],
         "r_details": r_det,
         "top_videos": top_videos_data,
+        "all_videos_map": all_videos_map,
         "error": None
     }
 
