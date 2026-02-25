@@ -43,6 +43,13 @@ def login_user(email, password):
     token = secrets.token_hex(32)
     update_login_token(user["id"], token)
 
+    # Store cookie (30 days)
+    st.markdown(f"""
+    <script>
+    document.cookie = "cf_token={token}; path=/; max-age=2592000";
+    </script>
+    """, unsafe_allow_html=True)
+
     st.session_state.authenticated = True
     st.session_state.user_id = user["id"]
     st.session_state.username = user["username"]
