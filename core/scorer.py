@@ -646,7 +646,22 @@ def score_case(case_name, api_key, own_subs=0, progress_callback=None):
                 results.append(r)
 
     if not results:
-        return {"case_name": case_name, "error": "No YouTube results found", "vps": 0}
+        # Debug: try one more search with no filters
+        debug_results = search_yt(case_name, api_key, order="viewCount", n=5, duration="any")
+        if debug_results:
+            results = debug_results
+        else:
+            # Try raw API call to check for errors
+            import urllib.parse
+            test_url = f"{API_BASE}/search?part=snippet&q={urllib.parse.quote(case_name)}&type=video&maxResults=1&key={api_key}"
+            try:
+                test_resp = requests.get(test_url, timeout=20)
+                test_data = test_resp.json()
+                if "error" in test_data:
+                    return {"case_name": case_name, "error": f"YouTube API: {test_data['error']['message']}", "vps": 0}
+            except Exception as ex:
+                return {"case_name": case_name, "error": f"Connection error: {str(ex)}", "vps": 0}
+            return {"case_name": case_name, "error": "No YouTube results found after all fallbacks", "vps": 0}
 
     vids_ids = [i["id"]["videoId"] for i in results if "videoId" in i.get("id",{})]
     videos = video_stats(vids_ids, api_key)
